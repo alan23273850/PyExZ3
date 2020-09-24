@@ -1,4 +1,4 @@
-import logging
+import logging, os
 
 import utils
 
@@ -6,6 +6,9 @@ import CVC4
 from CVC4 import ExprManager, SmtEngine, SExpr
 
 from symbolic.cvc_expr.exprbuilder import ExprBuilder
+
+from symbolic.cvc_expr.integer import CVCInteger
+from symbolic.cvc_expr.string import CVCString
 
 log = logging.getLogger("se.cvc")
 
@@ -16,17 +19,19 @@ class CVCWrapper(object):
                'strings-exp': 'true',
                # Enable modular arithmetic with constant modulus
                'rewrite-divk': 'true',
-               # Per Query timeout of 5 seconds
-               'tlimit-per': 5000,
+               # Per Query timeout of 10 seconds
+               'tlimit-per': 10000,
                'output-language': 'smt2',
                'input-language': 'smt2'}
     logic = 'ALL_SUPPORTED'
 
-    def __init__(self):
+    def __init__(self, statsdir):
         self.asserts = None
         self.query = None
         self.em = None
-        self.solver = None
+        self.solver = None; self.cnt = 0; self.statsdir = statsdir
+        self.stats = {'sat_number': 0, 'sat_time': 0, 'unsat_number': 0, 'unsat_time': 0, 'otherwise_number': 0, 'otherwise_time': 0}
+        if self.statsdir: os.system(f'mkdir -p {self.statsdir}/formula')
 
     def findCounterexample(self, asserts, query):
         """Tries to find a counterexample to the query while
@@ -48,17 +53,32 @@ class CVCWrapper(object):
     def _findModel(self):
         self.solver.push()
         exprbuilder = ExprBuilder(self.asserts, self.query, self.solver)
+        var_to_types = {}
+        for (k, v) in exprbuilder.cvc_vars.items():
+            if isinstance(v, CVCInteger): var_to_types[k] = 'Int'
+            elif isinstance(v, CVCString): var_to_types[k] = 'String'
+            else: raise NotImplementedError
         self.solver.assertFormula(exprbuilder.query.cvc_expr)
+        if self.statsdir:
+            with open(self.statsdir + f"/formula/{self.cnt}.smt2", 'w') as f:
+                declare_vars = "\n".join(f"(declare-const {name} {_type})" for (name, _type) in var_to_types.items())
+                get_vars = "\n".join(f"(get-value ({name}))" for name in var_to_types.keys())
+                f.write(f"(set-logic ALL)\n{declare_vars}\n{exprbuilder.queries}\n(check-sat)\n{get_vars}\n")
+        self.cnt += 1
         try:
             result = self.solver.checkSat()
             log.debug("Solver returned %s" % result.toString())
             if not result.isSat():
+                self.stats['unsat_number'] += 1; self.stats['unsat_time'] += self.solver.getTimeUsage() / 1000.0
                 ret = None
             elif result.isUnknown():
+                self.stats['otherwise_number'] += 1; self.stats['otherwise_time'] += self.solver.getTimeUsage() / 1000.0
                 ret = None
             elif result.isSat():
+                self.stats['sat_number'] += 1; self.stats['sat_time'] += self.solver.getTimeUsage() / 1000.0
                 ret = self._getModel(exprbuilder.cvc_vars)
             else:
+                self.stats['otherwise_number'] += 1; self.stats['otherwise_time'] += self.solver.getTimeUsage() / 1000.0
                 raise Exception("Unexpected SMT result")
         except RuntimeError as r:
             log.debug("CVC exception %s" % r)

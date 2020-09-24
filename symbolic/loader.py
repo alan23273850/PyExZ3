@@ -1,11 +1,13 @@
 # Copyright: copyright.txt
 
+import coverage, func_timeout, traceback
 import inspect
 import re
 import os
 import sys
+import importlib
 from .invocation import FunctionInvocation
-from .symbolic_types import SymbolicInteger, getSymbolic
+from .symbolic_types import SymbolicInteger, SymbolicStr, getSymbolic
 
 # The built-in definition of len wraps the return value in an int() constructor, destroying any symbolic types.
 # By redefining len here we can preserve symbolic integer types.
@@ -13,14 +15,15 @@ import builtins
 builtins.len = (lambda x : x.__len__())
 
 class Loader:
-	def __init__(self, filename, entry):
-		self._fileName = os.path.basename(filename)
-		self._fileName = self._fileName[:-3]
-		if (entry == ""):
-			self._entryPoint = self._fileName
-		else:
-			self._entryPoint = entry;
+	class EXCEPTION: pass # used to indicate occurrence of Exception during execution
+
+	def __init__(self, modpath, entry, root, statsdir):
+		# root + modpath = filename, plus entry ==> 4 basic elements!
+		root = os.path.abspath(root); self.modpath = modpath
+		self._fileName = root + '/' + self.modpath.replace('.', '/') + '.py'
+		self._entryPoint = self.modpath.split('.')[-1] if entry is None else entry
 		self._resetCallback(True)
+		self.statsdir = statsdir
 
 	def getFile(self):
 		return self._fileName
@@ -28,35 +31,49 @@ class Loader:
 	def getEntry(self):
 		return self._entryPoint
 	
-	def createInvocation(self):
-		inv = FunctionInvocation(self._execute,self._resetCallback)
-		func = self.app.__dict__[self._entryPoint]
-		argspec = inspect.getargspec(func)
+	def createInvocation(self, inputs):
+		inv = FunctionInvocation(self._execute, self._resetCallback, self.func)
+		# func = self.app.__dict__[self._entryPoint]
+		# argspec = inspect.getargspec(self.func)
 		# check to see if user specified initial values of arguments
-		if "concrete_args" in func.__dict__:
-			for (f,v) in func.concrete_args.items():
-				if not f in argspec.args:
-					print("Error in @concrete: " +  self._entryPoint + " has no argument named " + f)
-					raise ImportError()
+		# if "concrete_args" in func.__dict__:
+		# 	for (f,v) in func.concrete_args.items():
+		# 		if not f in argspec.args:
+		# 			print("Error in @concrete: " +  self._entryPoint + " has no argument named " + f)
+		# 			raise ImportError()
+		# 		else:
+		# 			Loader._initializeArgumentConcrete(inv,f,v)
+		# if "symbolic_args" in func.__dict__:
+		# 	for (f,v) in func.symbolic_args.items():
+		# 		if not f in argspec.args:
+		# 			print("Error (@symbolic): " +  self._entryPoint + " has no argument named " + f)
+		# 			raise ImportError()
+		# 		elif f in inv.getNames():
+		# 			print("Argument " + f + " defined in both @concrete and @symbolic")
+		# 			raise ImportError()
+		# 		else:
+		# 			s = getSymbolic(v)
+		# 			if (s == None):
+		# 				print("Error at argument " + f + " of entry point " + self._entryPoint + " : no corresponding symbolic type found for type " + str(type(v)))
+		# 				raise ImportError()
+		# 			Loader._initializeArgumentSymbolic(inv, f, v, s)
+		para = inspect.signature(self.func).parameters.values()
+		if inputs is None: # original version, we do not use this now...
+			for a in para:
+				if not a.name in inv.getNames():
+					Loader._initializeArgumentSymbolic(inv, a.name, 0, SymbolicInteger)
+		else:
+			for v in para:
+				if v.kind in [inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD]: continue # do not support *args, **kwargs currently
+				if v.name in inputs:
+					value = inputs[v.name]
 				else:
-					Loader._initializeArgumentConcrete(inv,f,v)
-		if "symbolic_args" in func.__dict__:
-			for (f,v) in func.symbolic_args.items():
-				if not f in argspec.args:
-					print("Error (@symbolic): " +  self._entryPoint + " has no argument named " + f)
-					raise ImportError()
-				elif f in inv.getNames():
-					print("Argument " + f + " defined in both @concrete and @symbolic")
-					raise ImportError()
-				else:
-					s = getSymbolic(v)
-					if (s == None):
-						print("Error at argument " + f + " of entry point " + self._entryPoint + " : no corresponding symbolic type found for type " + str(type(v)))
-						raise ImportError()
-					Loader._initializeArgumentSymbolic(inv, f, v, s)
-		for a in argspec.args:
-			if not a in inv.getNames():
-				Loader._initializeArgumentSymbolic(inv, a, 0, SymbolicInteger)
+					if (t:=v.default) is not inspect._empty: value = t
+					elif (t:=v.annotation) is not inspect._empty: value = t()
+					else: value = ''
+				if type(value) is int: Loader._initializeArgumentSymbolic(inv, v.name, value, SymbolicInteger)
+				elif type(value) is str: Loader._initializeArgumentSymbolic(inv, v.name, value, SymbolicStr)
+				else: Loader._initializeArgumentConcrete(inv, v.name, value)
 		return inv
 
 	# need these here (rather than inline above) to correctly capture values in lambda
@@ -66,36 +83,59 @@ class Loader:
 	def _initializeArgumentSymbolic(inv,f,val,st):
 		inv.addArgumentConstructor(f, val, lambda n,v: st(n,v))
 
-	def executionComplete(self, return_vals):
-		if "expected_result" in self.app.__dict__:
-			return self._check(return_vals, self.app.__dict__["expected_result"]())
-		if "expected_result_set" in self.app.__dict__:
-			return self._check(return_vals, self.app.__dict__["expected_result_set"](),False)
-		else:
-			print(self._fileName + ".py contains no expected_result function")
-			return None
+	# def executionComplete(self, return_vals):
+	# 	if "expected_result" in self.app.__dict__:
+	# 		return self._check(return_vals, self.app.__dict__["expected_result"]())
+	# 	if "expected_result_set" in self.app.__dict__:
+	# 		return self._check(return_vals, self.app.__dict__["expected_result_set"](),False)
+	# 	else:
+	# 		print(self._fileName + " contains no expected_result function")
+	# 		return None
+
+	@staticmethod
+	def get_funcobj_from_modpath_and_funcname(modname, funcname):
+		execute = importlib.import_module(modname)
+		while '.' in funcname:
+			print(execute.__dict__)
+			execute = getattr(execute, funcname.split('.')[0])
+			funcname = funcname.split('.')[1]
+		return getattr(execute, funcname)
 
 	# -- private
 
 	def _resetCallback(self,firstpass=False):
-		self.app = None
-		if firstpass and self._fileName in sys.modules:
-			print("There already is a module loaded named " + self._fileName)
+		self.func = None
+		if firstpass and self.modpath in sys.modules:
+			print("There already is a module loaded named " + self.modpath)
 			raise ImportError()
 		try:
-			if (not firstpass and self._fileName in sys.modules):
-				del(sys.modules[self._fileName])
-			self.app =__import__(self._fileName)
-			if not self._entryPoint in self.app.__dict__ or not callable(self.app.__dict__[self._entryPoint]):
-				print("File " +  self._fileName + ".py doesn't contain a function named " + self._entryPoint)
-				raise ImportError()
+			if (not firstpass and self.modpath in sys.modules):
+				del(sys.modules[self.modpath])
+			self.func = self.get_funcobj_from_modpath_and_funcname(self.modpath, self._entryPoint)
+			# if not self._entryPoint in self.app.__dict__ or not callable(self.app.__dict__[self._entryPoint]):
+			# 	print("File " +  self._fileName + ".py doesn't contain a function named " + self._entryPoint)
+			# 	raise ImportError()
 		except Exception as arg:
-			print("Couldn't import " + self._fileName)
+			print("Couldn't import " + self.modpath)
 			print(arg)
 			raise ImportError()
 
-	def _execute(self, **args):
-		return self.app.__dict__[self._entryPoint](**args)
+	def _execute(self, args, kwargs):
+		result = self.EXCEPTION()
+		try:
+			# result = self.app.__dict__[self._entryPoint](**args)
+			result = func_timeout.func_timeout(15, self.func, args=args, kwargs=kwargs)
+		except func_timeout.FunctionTimedOut as e:
+			print('Timeout Input Vector:', args, kwargs); print(e) #; traceback.print_exc(); sys.exit(1)
+			if self.statsdir:
+				with open(self.statsdir + '/exception.txt', 'a') as f:
+					print('Timeout Input Vector:', args, kwargs, file=f); print(e, file=f)
+		except Exception as e:
+			print('Exception Input Vector:', args, kwargs); print(e); traceback.print_exc()
+			if self.statsdir:
+				with open(self.statsdir + '/exception.txt', 'a') as f:
+					print('Exception Input Vector:', args, kwargs, file=f); print(e, file=f)
+		return result
 
 	def _toBag(self,l):
 		bag = {}
@@ -116,18 +156,3 @@ class Loader:
 		else:
 			print("%s test passed <---" % self._fileName)
 			return True
-	
-def loaderFactory(filename,entry):
-	if not os.path.isfile(filename) or not re.search(".py$",filename):
-		print("Please provide a Python file to load")
-		return None
-	try: 
-		dir = os.path.dirname(filename)
-		sys.path = [ dir ] + sys.path
-		ret = Loader(filename,entry)
-		return ret
-	except ImportError:
-		sys.path = sys.path[1:]
-		return None
-
-

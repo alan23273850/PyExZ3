@@ -16,6 +16,7 @@ class ExprBuilder(object):
         self.em = self.solver.getExprManager()
         self.cvc_vars = {}
         self.query = self._toCVC(asserts, query)
+        self.queries = self._toCVC2(asserts, query)
 
     def _toCVC(self, asserts, query):
         smt_query = self._predToCVC(query).not_op()
@@ -23,6 +24,14 @@ class ExprBuilder(object):
             smt_query &= self._predToCVC(p)
         for guard in self.solver.guards:
             smt_query &= guard
+        return smt_query
+
+    def _toCVC2(self, asserts, query):
+        smt_query = '(assert ' + self._predToCVC(query).not_op().__str__() + ')\n'
+        for p in asserts:
+            smt_query += '(assert ' + self._predToCVC(p).__str__() + ')\n'
+        for guard in self.solver.guards:
+            smt_query += '(assert ' + guard.__str__() + ')\n'
         return smt_query
 
     def _predToCVC(self, pred, env=None):

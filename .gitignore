@@ -237,3 +237,5 @@ tmp.txt
 ## PyCharm
 #############
 .idea
+
+project_statistics/

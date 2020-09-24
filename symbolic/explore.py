@@ -1,7 +1,7 @@
 # Copyright: see copyright.txt
 
 from collections import deque
-import logging
+import logging, func_timeout, coverage
 import os
 
 from .z3_wrap import Z3Wrapper
@@ -12,7 +12,10 @@ from .symbolic_types import symbolic_type, SymbolicType
 log = logging.getLogger("se.conc")
 
 class ExplorationEngine:
-	def __init__(self, funcinv, solver="z3"):
+	def __init__(self, funcinv, solver="z3", statsdir=None, root=None):
+		self.statsdir = statsdir; self.root = root
+		if self.statsdir: os.system(f'rm -rf {statsdir}'); os.system(f'mkdir -p {statsdir}')
+
 		self.invocation = funcinv
 		# the input to the function
 		self.symbolic_inputs = {}  # string -> SymbolicType
@@ -31,7 +34,7 @@ class ExplorationEngine:
 			self.solver = Z3Wrapper()
 		elif solver == "cvc":
 			from .cvc_wrap import CVCWrapper
-			self.solver = CVCWrapper()
+			self.solver = CVCWrapper(self.statsdir)
 		else:
 			raise Exception("Unknown solver %s" % solver)
 
@@ -45,6 +48,8 @@ class ExplorationEngine:
 		constraint.inputs = self._getInputs()
 
 	def explore(self, max_iterations=0):
+		if self.root: self.coverage = coverage.Coverage(data_file=None, include=[self.root + '/**'])
+		if self.root: self.coverage.start()
 		self._oneExecution()
 		
 		iterations = 1
@@ -60,7 +65,11 @@ class ExplorationEngine:
 
 			log.info("Selected constraint %s" % selected)
 			asserts, query = selected.getAssertsAndQuery()
-			model = self.solver.findCounterexample(asserts, query)
+			try:
+				# model = self.solver.findCounterexample(asserts, query)
+				model = func_timeout.func_timeout(10, self.solver.findCounterexample, args=[asserts, query])
+			except func_timeout.FunctionTimedOut as e:
+				pass
 
 			if model == None:
 				continue
@@ -76,7 +85,17 @@ class ExplorationEngine:
 			if max_iterations != 0 and iterations >= max_iterations:
 				log.info("Maximum number of iterations reached, terminating")
 				break
-
+		if self.root:
+			self.coverage.stop()
+			total_lines = 0
+			executed_lines = 0
+			for file in self.coverage.get_data().measured_files():
+				_, executable_lines, m_lines, _ = self.coverage.analysis(file)
+				total_lines += len(set(executable_lines))
+				executed_lines += len(set(executable_lines)) - len(m_lines) # Do not use "len(set(self.coverage_data.lines(file)))" here!!!
+			if self.statsdir:
+				with open(self.statsdir + '/coverage.txt', 'w') as f:
+					f.write("{}/{} ({:.2%})\n".format(executed_lines, total_lines, (executed_lines/total_lines) if total_lines > 0 else 0))
 		return self.generated_inputs, self.execution_return_values, self.path
 
 	# private
@@ -106,8 +125,9 @@ class ExplorationEngine:
 			return v
 
 	def _recordInputs(self):
-		args = self.symbolic_inputs
-		inputs = [ (k,self._getConcrValue(args[k])) for k in args ]
+		args = self.symbolic_inputs; inputs = {}
+		# inputs = [ (k,self._getConcrValue(args[k])) for k in args ]
+		for (k, v) in args.items(): inputs[k] = self._getConcrValue(v)
 		self.generated_inputs.append(inputs)
 		print(inputs)
 		

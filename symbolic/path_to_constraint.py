@@ -55,8 +55,8 @@ class PathToConstraint:
 			if ( not done and expected.result != c.predicate.result or \
 				done and expected.result == c.predicate.result ):
 				print("Replay mismatch (done=",done,")")
-				print(expected)
-				print(c.predicate)
+				# print(expected)
+				# print(c.predicate)
 
 		if cneg is not None:
 			# We've already processed both
