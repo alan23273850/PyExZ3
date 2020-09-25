@@ -14,7 +14,7 @@ log = logging.getLogger("se.conc")
 class ExplorationEngine:
 	def __init__(self, funcinv, solver="z3", statsdir=None, root=None):
 		self.statsdir = statsdir; self.root = root
-		if self.statsdir: os.system(f'rm -rf {statsdir}'); os.system(f'mkdir -p {statsdir}')
+		if self.statsdir: os.system(f"rm -rf '{statsdir}'"); os.system(f"mkdir -p '{statsdir}'")
 
 		self.invocation = funcinv
 		# the input to the function
@@ -65,11 +65,11 @@ class ExplorationEngine:
 
 			log.info("Selected constraint %s" % selected)
 			asserts, query = selected.getAssertsAndQuery()
-			try:
-				# model = self.solver.findCounterexample(asserts, query)
-				model = func_timeout.func_timeout(10, self.solver.findCounterexample, args=[asserts, query])
-			except func_timeout.FunctionTimedOut as e:
-				pass
+			# try:
+			model = self.solver.findCounterexample(asserts, query)
+				# model = func_timeout.func_timeout(10, self.solver.findCounterexample, args=[asserts, query])
+			# except func_timeout.FunctionTimedOut as e:
+				# pass
 
 			if model == None:
 				continue

@@ -68,9 +68,13 @@ class Loader:
 				if v.name in inputs:
 					value = inputs[v.name]
 				else:
-					if (t:=v.default) is not inspect._empty: value = t
-					elif (t:=v.annotation) is not inspect._empty: value = t()
-					else: value = ''
+					has_value = False
+					if (t:=v.annotation) is not inspect._empty:
+						try: value = t(); has_value = True # may raise TypeError: Cannot instantiate ...
+						except: pass
+					if not has_value:
+						if (t:=v.default) is not inspect._empty: value = t
+						else: value = ''
 				if type(value) is int: Loader._initializeArgumentSymbolic(inv, v.name, value, SymbolicInteger)
 				elif type(value) is str: Loader._initializeArgumentSymbolic(inv, v.name, value, SymbolicStr)
 				else: Loader._initializeArgumentConcrete(inv, v.name, value)

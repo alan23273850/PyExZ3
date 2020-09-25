@@ -31,7 +31,7 @@ class CVCWrapper(object):
         self.em = None
         self.solver = None; self.cnt = 0; self.statsdir = statsdir
         self.stats = {'sat_number': 0, 'sat_time': 0, 'unsat_number': 0, 'unsat_time': 0, 'otherwise_number': 0, 'otherwise_time': 0}
-        if self.statsdir: os.system(f'mkdir -p {self.statsdir}/formula')
+        if self.statsdir: os.system(f"mkdir -p '{self.statsdir}/formula'")
 
     def findCounterexample(self, asserts, query):
         """Tries to find a counterexample to the query while

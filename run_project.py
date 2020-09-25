@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
-import coverage, importlib, inspect, os, pickle, subprocess, sys
+import argparse, coverage, importlib, inspect, os, pickle, subprocess, sys, func_timeout
 
-lib = '/home/alan23273850/.local/share/virtualenvs/newspaper-BPbAuwkq/lib/python3.8/site-packages'; sys.path.insert(0, lib)
-rootdir = os.path.abspath('../newspaper') + '/'; sys.path.insert(0, rootdir); project_name = rootdir[:-1].split('/')[-1]
-os.system(f"rm -rf ./project_statistics/{project_name}")
+parser = argparse.ArgumentParser(); parser.add_argument("mode"); parser.add_argument("project"); args = parser.parse_args()
+
+rootdir = os.path.abspath(args.project) + '/'; lib = rootdir + '.venv/lib/python3.8/site-packages'
+sys.path.insert(0, lib); sys.path.insert(0, rootdir); project_name = rootdir[:-1].split('/')[-1]
+os.system(f"rm -rf './project_statistics/{project_name}'")
+
+for dirpath, _, _ in os.walk(rootdir):
+    dirpath = os.path.abspath(dirpath) + '/'
+    if dirpath != rootdir and not dirpath.startswith(rootdir + '.'):
+        print(dirpath)
+        os.system(f"touch '{dirpath}/__init__.py'")
 
 # Please note this function must be executed in a child process, or
 # the import action will affect the coverage measurement later.
@@ -26,31 +34,34 @@ def extract_function_list_from_modpath(modpath):
     # print()
     return ans
 
-for dirpath, _, files in os.walk(rootdir[:-1]):
+for dirpath, _, files in os.walk(rootdir):
     dirpath += '/'
     for file in files:
         if file.endswith('.py'):
             modpath = os.path.abspath(dirpath + file)[len(rootdir):-3].replace('/', '.')
-            # if modpath != 'newspaper.api': continue
             if os.fork() == 0: # child process
                 funcs = extract_function_list_from_modpath(modpath)
                 for f in funcs:
                     if '<locals>' not in f: # cannot access nested functions
-                        # if f != 'build': continue
-                        # cmd = ['./py-conbyte.py', '-r', rootdir, modpath, '-s', f, '{}', '-m', '20', '--lib', lib, '--dump_projstats', '--ignore_return']
-                        cmd = ['./pyexz3.py', '-r', rootdir, modpath, '-s', f, '{}', '-m', '20', '--lib', lib, '--dump_projstats']
-                        print(modpath, '+', f, '>>>'); print(' '.join(cmd))
-                        try: completed_process = subprocess.run(cmd, capture_output=True)
+                        if (modpath, f) in [('arithmetic_analysis.newton_forward_interpolation', 'main')]: continue
+                        if len(f.split('.')) == 2:
+                            (a, b) = f.split('.')
+                            if b.startswith('__') and not b.endswith('__'): b = '_' + a + b
+                            f = a + '.' + b
+                        if args.mode == '1': cmd = f"./py-conbyte.py -r '{rootdir}' '{modpath}' -s {f} {{}} -m 20 --lib '{lib}' --include_exception --dump_projstats"
+                        else: cmd = f"./pyexz3.py -r '{rootdir}' '{modpath}' -s {f} {{}} -m 20 --lib '{lib}' --dump_projstats"
+                        print(modpath, '+', f, '>>>'); print(cmd)
+                        try: completed_process = subprocess.run(cmd, shell=True, stdout=sys.stdout, stderr=sys.stderr)
                         except subprocess.CalledProcessError as e: print(e.output); sys.exit(1)
-                        print(completed_process.stderr.decode())
-                        print(completed_process.stdout.decode())
-                        try:
-                            output = completed_process.stdout.decode().splitlines()[-1]
-                        except Exception as e:
-                            print(e); sys.exit(0)
                 os._exit(os.EX_OK)
             os.wait()
 
+if args.mode == '1':
+    from conbyte.utils import get_funcobj_from_modpath_and_funcname
+    import conbyte.explore; _complete_primitive_arguments = conbyte.explore.ExplorationEngine._complete_primitive_arguments
+else:
+    import symbolic.loader; get_funcobj_from_modpath_and_funcname = symbolic.loader.Loader.get_funcobj_from_modpath_and_funcname
+    import symbolic.invocation; _complete_primitive_arguments = symbolic.invocation.FunctionInvocation._complete_primitive_arguments
 func_inputs = {}; cov = coverage.Coverage(data_file=None, include=[rootdir + '**'])
 cov.start()
 for dirpath, _, files in os.walk(f"./project_statistics/{project_name}"):
@@ -60,11 +71,9 @@ for dirpath, _, files in os.walk(f"./project_statistics/{project_name}"):
                 inputs = pickle.load(f)
             func_inputs[(dirpath.split('/')[-2], dirpath.split('/')[-1])] = inputs
             for i in inputs:
-                import symbolic.invocation
-                import symbolic.loader
-                f = symbolic.loader.Loader.get_funcobj_from_modpath_and_funcname(dirpath.split('/')[-2], dirpath.split('/')[-1])
-                iargs, ikwargs = symbolic.invocation.FunctionInvocation._complete_primitive_arguments(f, i)
-                try: f(*iargs, **ikwargs)
+                f = get_funcobj_from_modpath_and_funcname(dirpath.split('/')[-2], dirpath.split('/')[-1])
+                iargs, ikwargs = _complete_primitive_arguments(f, i)
+                try: func_timeout.func_timeout(15, f, args=iargs, kwargs=ikwargs)
                 except: pass
 cov.stop()
 total_lines = 0

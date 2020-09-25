@@ -238,4 +238,5 @@ tmp.txt
 #############
 .idea
 
+.venv/
 project_statistics/

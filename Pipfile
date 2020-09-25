@@ -6,7 +6,7 @@ name = "pypi"
 [packages]
 z3-solver = "*"
 pytest-parallel = "*"
-coverage = "*"
+coverage = "==4.5.4"
 func-timeout = "==4.3.5"
 
 [dev-packages]
