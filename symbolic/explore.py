@@ -1,7 +1,7 @@
 # Copyright: see copyright.txt
 
 from collections import deque
-import logging, func_timeout, coverage
+import logging, coverage, func_timeout
 import os
 
 from .z3_wrap import Z3Wrapper
@@ -47,12 +47,8 @@ class ExplorationEngine:
 		# make sure to remember the input that led to this constraint
 		constraint.inputs = self._getInputs()
 
-	def explore(self, max_iterations=0):
-		if self.root: self.coverage = coverage.Coverage(data_file=None, include=[self.root + '/**'])
-		if self.root: self.coverage.start()
-		self._oneExecution()
-		
-		iterations = 1
+	def _explore_loop(self, max_iterations):
+		self._oneExecution(); iterations = 1
 		if max_iterations != 0 and iterations >= max_iterations:
 			log.debug("Maximum number of iterations reached, terminating")
 			return self.execution_return_values
@@ -61,15 +57,11 @@ class ExplorationEngine:
 			selected = self.constraints_to_solve.popleft()
 			if selected.processed:
 				continue
-			self._setInputs(selected.inputs)			
+			self._setInputs(selected.inputs)
 
 			log.info("Selected constraint %s" % selected)
 			asserts, query = selected.getAssertsAndQuery()
-			# try:
 			model = self.solver.findCounterexample(asserts, query)
-				# model = func_timeout.func_timeout(10, self.solver.findCounterexample, args=[asserts, query])
-			# except func_timeout.FunctionTimedOut as e:
-				# pass
 
 			if model == None:
 				continue
@@ -79,12 +71,20 @@ class ExplorationEngine:
 
 			self._oneExecution(selected)
 
-			iterations += 1			
+			iterations += 1
 			self.num_processed_constraints += 1
 
 			if max_iterations != 0 and iterations >= max_iterations:
 				log.info("Maximum number of iterations reached, terminating")
 				break
+
+	def explore(self, max_iterations=0, total_timeout=900):
+		if self.root: self.coverage = coverage.Coverage(data_file=None, include=[self.root + '/**'])
+		if self.root: self.coverage.start()
+
+		try: func_timeout.func_timeout(total_timeout, self._explore_loop, args=(max_iterations,))
+		except: pass
+
 		if self.root:
 			self.coverage.stop()
 			total_lines = 0

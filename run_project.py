@@ -1,91 +1,81 @@
 #!/usr/bin/env python3
-import argparse, coverage, importlib, inspect, os, pickle, subprocess, sys, func_timeout
+from to_be_imported import *
 
-parser = argparse.ArgumentParser(); parser.add_argument("mode"); parser.add_argument("project"); args = parser.parse_args()
-
-rootdir = os.path.abspath(args.project) + '/'; lib = rootdir + '.venv/lib/python3.8/site-packages'
-sys.path.insert(0, lib); sys.path.insert(0, rootdir); project_name = rootdir[:-1].split('/')[-1]
 os.system(f"rm -rf './project_statistics/{project_name}'")
 
 for dirpath, _, _ in os.walk(rootdir):
-    dirpath = os.path.abspath(dirpath) + '/'
-    if dirpath != rootdir and not dirpath.startswith(rootdir + '.'):
+    dirpath = os.path.abspath(dirpath)
+    if dirpath != rootdir and not dirpath.startswith(rootdir + '/.') and '__pycache__' not in dirpath: # and '.venv' not in dirpath:
         print(dirpath)
         os.system(f"touch '{dirpath}/__init__.py'")
 
 # Please note this function must be executed in a child process, or
 # the import action will affect the coverage measurement later.
-def extract_function_list_from_modpath(modpath):
-    ans = []#; print(modpath, '==> ', end='')
+def extract_function_list_from_modpath(rootdir, modpath):
+    ans = []; print(modpath, '(' + modpath.replace('.', '/') + '.py)', '==> ', end='')
+    if modpath.endswith('.__init__'): return ans # an empty list here
     try:
-        mod = importlib.import_module(modpath)#; print(mod, end='')
+        mod = func_timeout.func_timeout(10, get_module_from_rootdir_and_modpath, args=(rootdir, modpath,))
+        print(mod, end='')
         for _, obj in inspect.getmembers(mod):
             if inspect.isclass(obj):
                 for _, o in inspect.getmembers(obj):
-                    if inspect.isfunction(o):
-                        if inspect.getmodule(o) == mod:
-                            ans.append(o.__qualname__)#; print(o.__qualname__)
-            elif inspect.isfunction(obj):
-                if inspect.getmodule(obj) == mod:
-                    ans.append(obj.__qualname__)#; print(obj.__qualname__)
+                    if (inspect.isfunction(o) or inspect.ismethod(o)) and o.__module__ == modpath: # and inspect.signature(o).parameters:
+                        ans.append(o.__qualname__)#; print(o.__qualname__)
+            elif (inspect.isfunction(obj) or inspect.ismethod(obj)) and obj.__module__ == modpath: # and inspect.signature(obj).parameters:
+                ans.append(obj.__qualname__)#; print(obj.__qualname__)
+        i = 0
+        while i < len(ans):
+            if '<locals>' in ans[i]: del ans[i]; continue # cannot access nested functions
+            if get_function_from_module_and_funcname(mod, ans[i]) is None: del ans[i]; continue # assert 的效果
+            if len(ans[i].split('.')) == 2:
+                (a, b) = ans[i].split('.')
+                if b.startswith('__') and not b.endswith('__'): b = '_' + a + b
+                ans[i] = a + '.' + b
+            i += 1
+    except func_timeout.FunctionTimedOut: pass
     except Exception as e:
-        pass
-        # print('Exception: ' + str(e), end='')
-    # print()
+        print('Exception: ' + str(e), end='', flush=True)
+        print('\nWe\'re going to get stuck here...', flush=True)
+        import traceback; traceback.print_exc()
+        while True: pass
+        # if 'No module named' in str(e):
+        #     print(' Raise Exception!!!', end='')
+        #     raise e
+    print()
     return ans
 
-for dirpath, _, files in os.walk(rootdir):
-    dirpath += '/'
-    for file in files:
-        if file.endswith('.py'):
-            modpath = os.path.abspath(dirpath + file)[len(rootdir):-3].replace('/', '.')
-            if os.fork() == 0: # child process
-                funcs = extract_function_list_from_modpath(modpath)
-                for f in funcs:
-                    if '<locals>' not in f: # cannot access nested functions
-                        if (modpath, f) in [('arithmetic_analysis.newton_forward_interpolation', 'main')]: continue
-                        if len(f.split('.')) == 2:
-                            (a, b) = f.split('.')
-                            if b.startswith('__') and not b.endswith('__'): b = '_' + a + b
-                            f = a + '.' + b
-                        if args.mode == '1': cmd = f"./py-conbyte.py -r '{rootdir}' '{modpath}' -s {f} {{}} -m 20 --lib '{lib}' --include_exception --dump_projstats"
-                        else: cmd = f"./pyexz3.py -r '{rootdir}' '{modpath}' -s {f} {{}} -m 20 --lib '{lib}' --dump_projstats"
-                        print(modpath, '+', f, '>>>'); print(cmd)
-                        try: completed_process = subprocess.run(cmd, shell=True, stdout=sys.stdout, stderr=sys.stderr)
-                        except subprocess.CalledProcessError as e: print(e.output); sys.exit(1)
-                os._exit(os.EX_OK)
-            os.wait()
+cont = False
+start = time.time()
+try:
+    for dirpath, _, files in os.walk(rootdir):
+        dirpath += '/'
+        for file in files:
+            if file.endswith('.py'):
+                modpath = os.path.abspath(dirpath + file)[len(rootdir) + 1:-3].replace('/', '.')
+                if not modpath.startswith('.venv') and '__pycache__' not in modpath:
+                    # if 'solutions.system_design.mint.mint_mapreduce' not in modpath: continue #cont = True
+                    # if not cont: continue
+                    if args.mode == '1': cmd = f"./py-conbyte.py -r '{rootdir}' '{modpath}' --total_timeout {TOTAL_TIMEOUT} {{}} -m {args.iteration} --lib '{lib}' --include_exception --dump_projstats"
+                    elif args.mode == '2': cmd = f"./pyexz3.py -r '{rootdir}' '{modpath}' --total_timeout {TOTAL_TIMEOUT} {{}} -m {args.iteration} --lib '{lib}' --dump_projstats"
+                    else: cmd = f"./py-conbyte.py -r '{rootdir}' '{modpath}' --total_timeout {TOTAL_TIMEOUT} {{}} -m 1 --lib '{lib}' --include_exception --dump_projstats"
+                    if os.fork() == 0: # child process
+                        funcs = extract_function_list_from_modpath(rootdir, modpath)
+                        for f in funcs:
+                            cmd2 = cmd + f" -s {f}"
+                            print(modpath, '+', f, '>>>'); print(cmd2)
+                            try: completed_process = subprocess.run(cmd2, shell=True, stdout=sys.stdout, stderr=sys.stderr)
+                            except subprocess.CalledProcessError as e: print(e.output)
+                        os._exit(os.EX_OK)
+                    os.wait()
+                end = time.time()
+                #if end - start > 3 * 60 * 60:
+                #    raise JumpOutOfLoop()
+except Exception as e:
+    print('Exception: ' + str(e), end='', flush=True)
+    import traceback; traceback.print_exc()
 
-if args.mode == '1':
-    from conbyte.utils import get_funcobj_from_modpath_and_funcname
-    import conbyte.explore; _complete_primitive_arguments = conbyte.explore.ExplorationEngine._complete_primitive_arguments
-else:
-    import symbolic.loader; get_funcobj_from_modpath_and_funcname = symbolic.loader.Loader.get_funcobj_from_modpath_and_funcname
-    import symbolic.invocation; _complete_primitive_arguments = symbolic.invocation.FunctionInvocation._complete_primitive_arguments
-func_inputs = {}; cov = coverage.Coverage(data_file=None, include=[rootdir + '**'])
-cov.start()
-for dirpath, _, files in os.walk(f"./project_statistics/{project_name}"):
-    for file in files:
-        if file == 'inputs.pkl':
-            with open(os.path.abspath(dirpath + '/' + file), 'rb') as f:
-                inputs = pickle.load(f)
-            func_inputs[(dirpath.split('/')[-2], dirpath.split('/')[-1])] = inputs
-            for i in inputs:
-                f = get_funcobj_from_modpath_and_funcname(dirpath.split('/')[-2], dirpath.split('/')[-1])
-                iargs, ikwargs = _complete_primitive_arguments(f, i)
-                try: func_timeout.func_timeout(15, f, args=iargs, kwargs=ikwargs)
-                except: pass
-cov.stop()
-total_lines = 0
-executed_lines = 0
-for file in cov.get_data().measured_files():
-    _, executable_lines, m_lines, _ = cov.analysis(file)
-    total_lines += len(set(executable_lines))
-    executed_lines += len(set(executable_lines)) - len(m_lines)
-    # print(file, executed_lines, total_lines)
+with open(os.path.abspath(f"./project_statistics/{project_name}/total_experiment_time.txt"), 'w') as f:
+    print(f"Time(sec.): {end-start}", file=f)
 
-with open(f"./project_statistics/{project_name}/inputs_and_coverage.txt", 'w') as f:
-    for (func, inputs) in func_inputs.items():
-        print(func, inputs, file=f)
-    print("\nTotal line coverage {}/{} ({:.2%})".format(executed_lines, total_lines, (executed_lines/total_lines) if total_lines > 0 else 0), file=f)
-print("\nTotal line coverage {}/{} ({:.2%})".format(executed_lines, total_lines, (executed_lines/total_lines) if total_lines > 0 else 0))
+print('End of running project.')

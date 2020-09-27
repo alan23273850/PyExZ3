@@ -1,6 +1,6 @@
 # Copyright: copyright.txt
 
-import coverage, func_timeout, traceback
+import coverage, functools, func_timeout, traceback
 import inspect
 import re
 import os
@@ -15,12 +15,13 @@ import builtins
 builtins.len = (lambda x : x.__len__())
 
 class Loader:
-	class EXCEPTION: pass # used to indicate occurrence of Exception during execution
+	class Timeout(metaclass=type('', (type,), {"__repr__": lambda self: '<TIMEOUT>'})): pass # indicate timeout after either a concolic or a primitive execution
+	class Exception(metaclass=type('', (type,), {"__repr__": lambda self: '<EXCEPTION>'})): pass # indicate occurrence of Exception during execution
 
 	def __init__(self, modpath, entry, root, statsdir):
 		# root + modpath = filename, plus entry ==> 4 basic elements!
-		root = os.path.abspath(root); self.modpath = modpath
-		self._fileName = root + '/' + self.modpath.replace('.', '/') + '.py'
+		self.root = os.path.abspath(root); self.modpath = modpath
+		self._fileName = self.root + '/' + self.modpath.replace('.', '/') + '.py'
 		self._entryPoint = self.modpath.split('.')[-1] if entry is None else entry
 		self._resetCallback(True)
 		self.statsdir = statsdir
@@ -97,13 +98,39 @@ class Loader:
 	# 		return None
 
 	@staticmethod
-	def get_funcobj_from_modpath_and_funcname(modname, funcname):
-		execute = importlib.import_module(modname)
-		while '.' in funcname:
-			print(execute.__dict__)
-			execute = getattr(execute, funcname.split('.')[0])
-			funcname = funcname.split('.')[1]
-		return getattr(execute, funcname)
+	def get_module_from_rootdir_and_modpath(rootdir, modpath):
+		filepath = os.path.join(rootdir, modpath.replace('.', '/') + '.py')
+		spec = importlib.util.spec_from_file_location(modpath, os.path.abspath(filepath))
+		module = importlib.util.module_from_spec(spec)
+		now_dir = os.getcwd(); os.chdir(os.path.dirname(filepath))
+		spec.loader.exec_module(module)
+		os.chdir(now_dir)
+		return module
+
+	@staticmethod
+	def get_function_from_module_and_funcname(module, funcname):
+		try:
+			while '.' in funcname:
+				module = getattr(module, funcname.split('.')[0])
+				funcname = funcname.split('.')[1]
+			func = getattr(module, funcname)
+			###########################################################################
+			if len(list(inspect.signature(func).parameters)) > 0:
+				for v in inspect.signature(func).parameters.values():
+					if v.annotation not in (int, str):
+						return None
+				return func
+			return None
+			###########################################################################
+			if len(list(inspect.signature(func).parameters)) > 0:
+				if list(inspect.signature(func).parameters)[0] == 'cls':
+					func = functools.partial(func, module)
+				elif list(inspect.signature(func).parameters)[0] == 'self':
+					try: func = functools.partial(func, module())
+					except: pass # module() requires some arguments we don't know
+			return func
+		except Exception as e:
+			print(e); import traceback; traceback.print_exc(); return None
 
 	# -- private
 
@@ -115,7 +142,7 @@ class Loader:
 		try:
 			if (not firstpass and self.modpath in sys.modules):
 				del(sys.modules[self.modpath])
-			self.func = self.get_funcobj_from_modpath_and_funcname(self.modpath, self._entryPoint)
+			self.func = self.get_function_from_module_and_funcname(self.get_module_from_rootdir_and_modpath(self.root, self.modpath), self._entryPoint)
 			# if not self._entryPoint in self.app.__dict__ or not callable(self.app.__dict__[self._entryPoint]):
 			# 	print("File " +  self._fileName + ".py doesn't contain a function named " + self._entryPoint)
 			# 	raise ImportError()
@@ -125,20 +152,20 @@ class Loader:
 			raise ImportError()
 
 	def _execute(self, args, kwargs):
-		result = self.EXCEPTION()
+		result = self.Exception
 		try:
-			# result = self.app.__dict__[self._entryPoint](**args)
 			result = func_timeout.func_timeout(15, self.func, args=args, kwargs=kwargs)
-		except func_timeout.FunctionTimedOut as e:
-			print('Timeout Input Vector:', args, kwargs); print(e) #; traceback.print_exc(); sys.exit(1)
+		except func_timeout.FunctionTimedOut:
+			result = self.Timeout
+			print(f"Timeout (soft) for: {args}, {kwargs}")#; traceback.print_exc()
 			if self.statsdir:
 				with open(self.statsdir + '/exception.txt', 'a') as f:
-					print('Timeout Input Vector:', args, kwargs, file=f); print(e, file=f)
+					print(f"Timeout (soft) for: {args}, {kwargs}", file=f)
 		except Exception as e:
-			print('Exception Input Vector:', args, kwargs); print(e); traceback.print_exc()
+			print(f"Exception for: {args}, {kwargs}"); print(e)#; traceback.print_exc()
 			if self.statsdir:
 				with open(self.statsdir + '/exception.txt', 'a') as f:
-					print('Exception Input Vector:', args, kwargs, file=f); print(e, file=f)
+					print(f"Exception for: {args}, {kwargs}", file=f); print(e, file=f)
 		return result
 
 	def _toBag(self,l):
