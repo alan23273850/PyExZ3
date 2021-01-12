@@ -95,26 +95,25 @@ if testing_mode:
 else:
     total_lines = 0
     missing_lines = 0
-    # with open(os.path.abspath(f"./project_statistics/{project_name}/total_missing_lines.txt"), 'w') as f:
-    for file in coverage_data.measured_files():
-        if file not in all_function_ranges_wrt_file:
-            executable_lines = set()
-        else:
-            executable_lines = set(cov.analysis(file)[1]) & all_function_ranges_wrt_file[file]
-        # executable_lines = set(cov.analysis(file)[1]) # version not restricted by function ranges
-        m_lines = coverage_accumulated_missing_lines[file] & executable_lines
-        total_lines += len(executable_lines)
-        missing_lines += len(m_lines)
-        # if m_lines:
-        #     print(file, sorted(m_lines), file=f)
+    with open(os.path.abspath(f"./project_statistics/{project_name}/missing_and_executable_lines.txt"), 'w') as f:
+        for file in coverage_data.measured_files():
+            if file not in all_function_ranges_wrt_file:
+                executable_lines = set()
+            else:
+                executable_lines = set(cov.analysis(file)[1]) & all_function_ranges_wrt_file[file]
+            # executable_lines = set(cov.analysis(file)[1]) # version not restricted by function ranges
+            m_lines = coverage_accumulated_missing_lines[file] & executable_lines
+            total_lines += len(executable_lines)
+            missing_lines += len(m_lines)
+            print(file, sorted(m_lines), sorted(executable_lines), file=f)
     executed_lines = total_lines - missing_lines
 print("\nTotal line coverage {}/{} ({:.2%})".format(executed_lines, total_lines, (executed_lines/total_lines) if total_lines > 0 else 0))
 
 with open(os.path.abspath(f"./project_statistics/{project_name}/inputs_and_coverage.txt"), 'w') as f:
     for (func, inputs) in func_inputs.items():
-        print((rootdir + func[0].replace('.', '/') + '.py', func[1]), inputs, file=f)
+        print((rootdir + '/' + func[0].replace('.', '/') + '.py', func[1]), inputs, file=f)
     print("\nTotal line coverage {}/{} ({:.2%})".format(executed_lines, total_lines, (executed_lines/total_lines) if total_lines > 0 else 0), file=f)
     try:
-        with open(os.path.abspath(f"./project_statistics/{project_name}/total_experiment_time.txt"), 'r') as f2:
+        with open(os.path.abspath(f"./project_statistics/{project_name}/experiment_time.txt"), 'r') as f2:
             print(f2.readlines()[0], end='', file=f)
     except: pass

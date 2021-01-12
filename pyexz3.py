@@ -57,7 +57,7 @@ if app == None:
 
 result = None
 try:
-	engine = ExplorationEngine(app.createInvocation(eval(args[1])), solver=solver, statsdir=statsdir, root=options.root)
+	engine = ExplorationEngine(app, args[1], solver=solver, statsdir=statsdir, root=options.root)
 	generatedInputs, returnVals, path = engine.explore(options.max_iters, options.total_timeout)
 	if statsdir:
 		with open(statsdir + '/inputs.pkl', 'wb') as f:

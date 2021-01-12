@@ -75,7 +75,7 @@ except Exception as e:
     print('Exception: ' + str(e), end='', flush=True)
     import traceback; traceback.print_exc()
 
-with open(os.path.abspath(f"./project_statistics/{project_name}/total_experiment_time.txt"), 'w') as f:
+with open(os.path.abspath(f"./project_statistics/{project_name}/experiment_time.txt"), 'w') as f:
     print(f"Time(sec.): {end-start}", file=f)
 
 print('End of running project.')

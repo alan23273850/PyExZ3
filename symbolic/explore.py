@@ -1,7 +1,7 @@
 # Copyright: see copyright.txt
 
 from collections import deque
-import logging, coverage, func_timeout
+import inspect, logging, coverage, func_timeout
 import os
 
 from .z3_wrap import Z3Wrapper
@@ -12,16 +12,16 @@ from .symbolic_types import symbolic_type, SymbolicType
 log = logging.getLogger("se.conc")
 
 class ExplorationEngine:
-	def __init__(self, funcinv, solver="z3", statsdir=None, root=None):
-		self.statsdir = statsdir; self.root = root
+	def __init__(self, app, input_dict, solver="z3", statsdir=None, root=None):
+		self.statsdir = statsdir; self.root = root; self.execute = app.func
 		if self.statsdir: os.system(f"rm -rf '{statsdir}'"); os.system(f"mkdir -p '{statsdir}'")
 
-		self.invocation = funcinv
+		self.target_file = app.getFile(); self.invocation = app.createInvocation(eval(input_dict))
 		# the input to the function
 		self.symbolic_inputs = {}  # string -> SymbolicType
 		# initialize
-		for n in funcinv.getNames():
-			self.symbolic_inputs[n] = funcinv.createArgumentValue(n)
+		for n in self.invocation.getNames():
+			self.symbolic_inputs[n] = self.invocation.createArgumentValue(n)
 
 		self.constraints_to_solve = deque([])
 		self.num_processed_constraints = 0
@@ -48,13 +48,12 @@ class ExplorationEngine:
 		constraint.inputs = self._getInputs()
 
 	def _explore_loop(self, max_iterations):
-		self.tried_input_args = []
+		self.tried_input_args = []; self.missing_lines = set(range(inspect.getsourcelines(self.execute)[1], inspect.getsourcelines(self.execute)[1] + len(inspect.getsourcelines(self.execute)[0])))
 		self._oneExecution(); iterations = 1
 		if max_iterations != 0 and iterations >= max_iterations:
 			log.debug("Maximum number of iterations reached, terminating")
 			return self.execution_return_values
-
-		while not self._isExplorationComplete():
+		while self.missing_lines and not self._isExplorationComplete():
 			selected = self.constraints_to_solve.popleft()
 			if selected.processed:
 				continue
@@ -81,8 +80,9 @@ class ExplorationEngine:
 				break
 
 	def explore(self, max_iterations=0, total_timeout=900):
-		if self.root: self.coverage = coverage.Coverage(data_file=None, include=[self.root + '/**'])
-		if self.root: self.coverage.start()
+		if self.root:
+			self.coverage = coverage.Coverage(data_file=None, include=[self.root + '/**'])
+			self.coverage.start()
 
 		try: func_timeout.func_timeout(total_timeout, self._explore_loop, args=(max_iterations,))
 		except: pass
@@ -138,5 +138,6 @@ class ExplorationEngine:
 		self.path.reset(expected_path)
 		ret = self.invocation.callFunction(self.symbolic_inputs)
 		print(ret); self.tried_input_args.append(self.symbolic_inputs.copy())
+		self.missing_lines &= set(self.coverage.analysis(self.target_file)[2])
 		self.execution_return_values.append(ret)
 
