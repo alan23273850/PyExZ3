@@ -1,4 +1,4 @@
-import logging, os
+import logging, multiprocessing, os
 
 import utils
 
@@ -58,35 +58,39 @@ class CVCWrapper(object):
             if isinstance(v, CVCInteger): var_to_types[k] = 'Int'
             elif isinstance(v, CVCString): var_to_types[k] = 'String'
             else: raise NotImplementedError
-        self.solver.assertFormula(exprbuilder.query.cvc_expr)
-        try:
-            result = self.solver.checkSat()
-            log.debug("Solver returned %s" % result.toString())
-            if not result.isSat():
-                status = "unsat"
-                self.stats['unsat_number'] += 1; self.stats['unsat_time'] += self.solver.getTimeUsage() / 1000.0
-                ret = None
-            elif result.isUnknown():
-                status = "UNKNOWN"
-                self.stats['otherwise_number'] += 1; self.stats['otherwise_time'] += self.solver.getTimeUsage() / 1000.0
-                ret = None
-            elif result.isSat():
-                status = "sat"
-                self.stats['sat_number'] += 1; self.stats['sat_time'] += self.solver.getTimeUsage() / 1000.0
-                ret = self._getModel(exprbuilder.cvc_vars)
-            else:
-                self.stats['otherwise_number'] += 1; self.stats['otherwise_time'] += self.solver.getTimeUsage() / 1000.0
-                raise Exception("Unexpected SMT result")
-            if self.statsdir:
-                with open(self.statsdir + f"/formula/{self.cnt}_{status}.smt2", 'w') as f:
-                    declare_vars = "\n".join(f"(declare-const {name} {_type})" for (name, _type) in var_to_types.items())
-                    get_vars = "\n".join(f"(get-value ({name}))" for name in var_to_types.keys())
-                    f.write(f"(set-logic ALL)\n{declare_vars}\n{exprbuilder.queries}\n(check-sat)\n{get_vars}\n")
-            self.cnt += 1
-        except RuntimeError as r:
-            log.debug("CVC exception %s" % r)
-            ret = None
-        self.solver.pop()
+        r, s = multiprocessing.Pipe()
+        if os.fork() == 0: # child process
+            self.solver.assertFormula(exprbuilder.query.cvc_expr) # this line may cause abrupt termination, so it must be run in a child process.
+            try:
+                result = self.solver.checkSat(); ret = None
+                log.debug("Solver returned %s" % result.toString())
+                if not result.isSat():
+                    status = "unsat"
+                    self.stats['unsat_number'] += 1; self.stats['unsat_time'] += self.solver.getTimeUsage() / 1000.0
+                elif result.isUnknown():
+                    status = "UNKNOWN"
+                    self.stats['otherwise_number'] += 1; self.stats['otherwise_time'] += self.solver.getTimeUsage() / 1000.0
+                elif result.isSat():
+                    status = "sat"
+                    self.stats['sat_number'] += 1; self.stats['sat_time'] += self.solver.getTimeUsage() / 1000.0
+                    ret = self._getModel(exprbuilder.cvc_vars)
+                else:
+                    self.stats['otherwise_number'] += 1; self.stats['otherwise_time'] += self.solver.getTimeUsage() / 1000.0
+                    raise Exception("Unexpected SMT result")
+                if self.statsdir:
+                    with open(self.statsdir + f"/formula/{self.cnt}_{status}.smt2", 'w') as f:
+                        declare_vars = "\n".join(f"(declare-const {name} {_type})" for (name, _type) in var_to_types.items())
+                        get_vars = "\n".join(f"(get-value ({name}))" for name in var_to_types.keys())
+                        f.write(f"(set-logic ALL)\n{declare_vars}\n{exprbuilder.queries}\n(check-sat)\n{get_vars}\n")
+                self.cnt += 1
+            except RuntimeError as r:
+                log.debug("CVC exception %s" % r)
+            s.send((self.stats, self.cnt, ret))
+            os._exit(os.EX_OK)
+        os.wait()
+        if r.poll(): (self.stats, self.cnt, ret) = r.recv()
+        else: ret = None
+        r.close(); s.close(); self.solver.pop()
         return ret
 
     @staticmethod

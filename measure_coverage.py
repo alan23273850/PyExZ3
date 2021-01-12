@@ -73,7 +73,10 @@ with open(f'./project_statistics/{project_name}/incomplete_functions.txt', 'w') 
                 try: n = min(mylist)
                 except: n = 0
                 # if n == 0: print(len(func_inputs[(dirpath.split('/')[-2], dirpath.split('/')[-1])]))
-                print(f"{our_filename}:{n}, {dirpath.split('/')[-1]}, {mylist}, {exe} -r {rootdir} '{dirpath.split('/')[-2]}' -s {dirpath.split('/')[-1]} {{}} --lib '{lib}' --include_exception --total_timeout={TOTAL_TIMEOUT}", file=fmf)
+                if args.mode == '2':
+                    print(f"{our_filename}:{n}, {dirpath.split('/')[-1]}, {mylist}, {exe} -r {rootdir} '{dirpath.split('/')[-2]}' -s {dirpath.split('/')[-1]} {{}} --lib '{lib}' --total_timeout={TOTAL_TIMEOUT}", file=fmf)
+                else:
+                    print(f"{our_filename}:{n}, {dirpath.split('/')[-1]}, {mylist}, {exe} -r {rootdir} '{dirpath.split('/')[-2]}' -s {dirpath.split('/')[-1]} {{}} --lib '{lib}' --include_exception --total_timeout={TOTAL_TIMEOUT}", file=fmf)
 end = time.time()
 print(f"Time(sec.): {end-start2}") # total time to test all inputs
 
