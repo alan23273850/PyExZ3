@@ -39,7 +39,7 @@ with open(f'./project_statistics/{project_name}/incomplete_functions.txt', 'w') 
                         sys.dont_write_bytecode = True # same reason mentioned in the concolic environment
                         cov.start()
                         module = get_module_from_rootdir_and_modpath(rootdir, dirpath.split('/')[-2])
-                        execute = get_function_from_module_and_funcname(module, dirpath.split('/')[-1])
+                        execute = get_function_from_module_and_funcname(module, dirpath.split('/')[-1], False)
                         s2.send(inspect.getsourcelines(execute)) # the result should remain the same for all inputs
                         pri_args, pri_kwargs = complete_primitive_arguments(execute, i)
                         try:

@@ -26,6 +26,7 @@ parser.add_option("-m", "--max-iters", dest="max_iters", type=int, help="Run spe
 parser.add_option("--cvc", dest="cvc", action="store_true", help="Use the CVC SMT solver instead of Z3", default=False)
 parser.add_option("--z3", dest="cvc", action="store_false", help="Use the Z3 SMT solver")
 parser.add_option("--dump_projstats", dest="dump_projstats", action='store_true')
+parser.add_option("--file_as_total", dest="file_as_total", action='store_true')
 parser.add_option("--total_timeout", dest="total_timeout", type=int, default=900)
 
 (options, args) = parser.parse_args()
@@ -58,7 +59,8 @@ if app == None:
 result = None
 try:
 	engine = ExplorationEngine(app, args[1], solver=solver, statsdir=statsdir, root=options.root)
-	generatedInputs, returnVals, path = engine.explore(options.max_iters, options.total_timeout)
+	generatedInputs, returnVals, path = engine.explore(options.max_iters, options.total_timeout, options.file_as_total)
+	print(str(engine.coverage_statistics()[1]) + '/' + str(engine.coverage_statistics()[0]), engine.coverage_statistics()[2])
 	if statsdir:
 		with open(statsdir + '/inputs.pkl', 'wb') as f:
 			pickle.dump(generatedInputs, f)

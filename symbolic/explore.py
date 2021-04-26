@@ -12,8 +12,8 @@ from .symbolic_types import symbolic_type, SymbolicType
 log = logging.getLogger("se.conc")
 
 class ExplorationEngine:
-	def __init__(self, app, input_dict, solver="z3", statsdir=None, root=None):
-		self.statsdir = statsdir; self.root = root; self.execute = app.func
+	def __init__(self, app, input_dict, solver="cvc", statsdir=None, root=None):
+		self.statsdir = statsdir; self.root = root; self.execute = app.func; self.function_lines_range = set(range(inspect.getsourcelines(self.execute)[1], inspect.getsourcelines(self.execute)[1] + len(inspect.getsourcelines(self.execute)[0])))
 		if self.statsdir: os.system(f"rm -rf '{statsdir}'"); os.system(f"mkdir -p '{statsdir}'")
 
 		self.target_file = app.getFile(); self.invocation = app.createInvocation(eval(input_dict))
@@ -48,7 +48,7 @@ class ExplorationEngine:
 		constraint.inputs = self._getInputs()
 
 	def _explore_loop(self, max_iterations):
-		self.tried_input_args = []; self.missing_lines = set(range(inspect.getsourcelines(self.execute)[1], inspect.getsourcelines(self.execute)[1] + len(inspect.getsourcelines(self.execute)[0])))
+		self.tried_input_args = []; self.missing_lines = self.function_lines_range.copy() # Note that .copy() is very important!!!
 		self._oneExecution(); iterations = 1
 		if max_iterations != 0 and iterations >= max_iterations:
 			log.debug("Maximum number of iterations reached, terminating")
@@ -79,26 +79,38 @@ class ExplorationEngine:
 				log.info("Maximum number of iterations reached, terminating")
 				break
 
-	def explore(self, max_iterations=0, total_timeout=900):
-		if self.root:
-			self.coverage = coverage.Coverage(data_file=None, include=[self.root + '/**'])
+	def explore(self, max_iterations=0, total_timeout=900, file_as_total=True):
+		if True: # self.root:
+			# self.coverage = coverage.Coverage(data_file=None, include=[self.root + '/**'])
+			self.coverage = coverage.Coverage(data_file=None, include=[self.target_file])
 			self.coverage.start()
 
 		try: func_timeout.func_timeout(total_timeout, self._explore_loop, args=(max_iterations,))
 		except: pass
-
-		if self.root:
+		if True: # self.root:
 			self.coverage.stop()
 			total_lines = 0
 			executed_lines = 0
+			missing_lines = {}
 			for file in self.coverage.get_data().measured_files():
 				_, executable_lines, m_lines, _ = self.coverage.analysis(file)
+				executable_lines = set(executable_lines); m_lines = set(m_lines)
+				if file == self.target_file and not file_as_total:
+					executable_lines &= self.function_lines_range
+					m_lines &= self.function_lines_range
 				total_lines += len(set(executable_lines))
 				executed_lines += len(set(executable_lines)) - len(m_lines) # Do not use "len(set(self.coverage_data.lines(file)))" here!!!
+				if m_lines: missing_lines[file] = m_lines
 			if self.statsdir:
 				with open(self.statsdir + '/coverage.txt', 'w') as f:
 					f.write("{}/{} ({:.2%})\n".format(executed_lines, total_lines, (executed_lines/total_lines) if total_lines > 0 else 0))
+			self.total_lines = total_lines
+			self.executed_lines = executed_lines
+			self.missing_lines = missing_lines
 		return self.generated_inputs, self.execution_return_values, self.path
+
+	def coverage_statistics(self):
+		return self.total_lines, self.executed_lines, self.missing_lines
 
 	# private
 

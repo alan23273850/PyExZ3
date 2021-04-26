@@ -27,7 +27,7 @@ def extract_function_list_from_modpath(rootdir, modpath):
         i = 0
         while i < len(ans):
             if '<locals>' in ans[i]: del ans[i]; continue # cannot access nested functions
-            if get_function_from_module_and_funcname(mod, ans[i]) is None: del ans[i]; continue # assert 的效果
+            if get_function_from_module_and_funcname(mod, ans[i], False) is None: del ans[i]; continue # assert 的效果
             if len(ans[i].split('.')) == 2:
                 (a, b) = ans[i].split('.')
                 if b.startswith('__') and not b.endswith('__'): b = '_' + a + b
