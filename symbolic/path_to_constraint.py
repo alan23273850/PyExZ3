@@ -13,18 +13,18 @@ class PathToConstraint:
 		self.add = add
 		self.root_constraint = Constraint(None, None)
 		self.current_constraint = self.root_constraint
-		self.expected_path = None
+		# self.expected_path = None
 
 	def reset(self,expected):
 		self.current_constraint = self.root_constraint
-		if expected==None:
-			self.expected_path = None
-		else:
-			self.expected_path = []
-			tmp = expected
-			while tmp.predicate is not None:
-				self.expected_path.append(tmp.predicate)
-				tmp = tmp.parent
+		# if expected==None:
+		# 	self.expected_path = None
+		# else:
+		# 	self.expected_path = []
+		# 	tmp = expected
+		# 	while tmp.predicate is not None:
+		# 		self.expected_path.append(tmp.predicate)
+		# 		tmp = tmp.parent
 
 	def whichBranch(self, branch, symbolic_type):
 		""" This function acts as instrumentation.
@@ -47,16 +47,16 @@ class PathToConstraint:
 		# check for path mismatch
 		# IMPORTANT: note that we don't actually check the predicate is the
 		# same one, just that the direction taken is the same
-		if self.expected_path != None and self.expected_path != []:
-			expected = self.expected_path.pop()
-			# while not at the end of the path, we expect the same predicate result
-			# at the end of the path, we expect a different predicate result
-			done = self.expected_path == []
-			if ( not done and expected.result != c.predicate.result or \
-				done and expected.result == c.predicate.result ):
-				print("Replay mismatch (done=",done,")")
-				# print(expected)
-				# print(c.predicate)
+		# if self.expected_path != None and self.expected_path != []:
+		# 	expected = self.expected_path.pop()
+		# 	# while not at the end of the path, we expect the same predicate result
+		# 	# at the end of the path, we expect a different predicate result
+		# 	done = self.expected_path == []
+		# 	if ( not done and expected.result != c.predicate.result or \
+		# 		done and expected.result == c.predicate.result ):
+		# 		print("Replay mismatch (done=",done,")")
+		# 		# print(expected)
+		# 		# print(c.predicate)
 
 		if cneg is not None:
 			# We've already processed both

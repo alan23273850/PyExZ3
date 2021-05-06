@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, subprocess, sys, unittest
+import os, subprocess, sys, unittest, time
 import symbolic.explore
 import symbolic.loader
 
@@ -15,7 +15,7 @@ class TestCodeSnippets(unittest.TestCase):
     def test_08(self): self._execute("test", "complex", {'x':0, 'y':0}) # OK
     def test_09(self): self._execute("test", "cseppento1", {'x':0, 'y':0}, {14, 19}) # OK with deadcode [14, 19]
     def test_10(self): self._execute("test", "cseppento2", {'a':0, 'b':0}, {5}) # OK with deadcode [5]
-    # def test_11(self): self._execute("test", "cseppento3", {'x':0}) # TODO: unacceptable running time (not executed in the original test suite either)
+    # def test_11(self): self._execute("test", "cseppento3", {'x':0}, {14}) # TODO: (> 15 minutes)
     def test_12(self): self._execute("test", "decorator_dict", {'d':{}}, {6, 8}) # TODO: dict type is not supported yet
     def test_13(self): self._execute("test", "decorator", {'a':0, 'b':0, 'c':0}) # OK
     def test_14(self): self._execute("test", "diamond", {'x':0, 'y':0, 'z':0}) # OK
@@ -75,7 +75,7 @@ class TestCodeSnippets(unittest.TestCase):
     def test_68(self): self._execute("fail", "arrayindex", {'i':0}, {13}) # TODO: still not able to pick another list element
     def test_69(self): self._execute("fail", "dictbool", {'d':{}}, {8}) # TODO: dict type is not supported yet
     def test_70(self): self._execute("fail", "divzero", {'in1':0, 'in2':0}, {7,8,9,10}) # TODO: truediv not mature enough
-    # def test_71(self): self._execute("fail", "git", {'a':0, 'b':0}) # TODO: unacceptable running time (not executed in the original test suite either)
+    # def test_71(self): self._execute("fail", "git", {'a':0, 'b':0}, {29,30}) # TODO: (> 15 minutes)
     def test_72(self): self._execute("fail", "pow", {'x':0}, {7}) # TODO: CVC4 cannot solve 4 == x**2
     def test_73(self): self._execute("fail", "sqrttest", {'in1':0}, {8,9,10}) # TODO: sqrt is still handled concretely
 
@@ -87,11 +87,14 @@ class TestCodeSnippets(unittest.TestCase):
             modpath = modpath.replace('/', '.')
             engine = symbolic.explore.ExplorationEngine(symbolic.loader.Loader(modpath, None, root, None), str(inputs))
             iteration = 0
+            start = time.time()
             while iteration == 0 or self._check_coverage(iteration, _missing_lines, missing_lines):
-                engine.explore(max_iterations=200, file_as_total=False)
+                engine.explore(max_iterations=0, total_timeout=900, file_as_total=False)
                 total_lines, executed_lines, missing_lines = engine.coverage_statistics() # missing_lines: dict
                 iteration += 1
                 # print(total_lines, executed_lines, missing_lines)
+            finish = time.time()
+            b, c, d, e, F, g = engine.solver.stats['sat_number'], engine.solver.stats['sat_time'], engine.solver.stats['unsat_number'], engine.solver.stats['unsat_time'], engine.solver.stats['otherwise_number'], engine.solver.stats['otherwise_time']
             # col_3 = str(list(map(lambda x: (list(x[0].values()), x[1]), engine.in_out)))[1:-1]
             # print(modpath + ':', col_3)
             # print(modpath + ':', _missing_lines)
@@ -102,11 +105,17 @@ class TestCodeSnippets(unittest.TestCase):
                     f.write(f'{_id}|-|-|-\n')
             else:
                 col_1 = "{}/{} ({:.2%})".format(executed_lines, total_lines, (executed_lines/total_lines) if total_lines > 0 else 0)
-                col_2 = str(sorted(list(missing_lines.values())[0]) if missing_lines else '')
-                if col_2 == str(sorted(_missing_lines)):
-                    col_1 += ' >> (100.00%)' #; col_2 += ' (dead code)'
+                # col_2 = str(sorted(list(missing_lines.values())[0]) if missing_lines else '')
+                # if col_2 == str(sorted(_missing_lines)):
+                #     col_1 += ' >> (100.00%)' #; col_2 += ' (dead code)'
                 with open(f'{_id}.csv', 'w') as f:
-                    f.write(f'{_id}|{col_1}|{col_2}|{col_3}\n')
+                    # echo "ID|Function|Line Coverage|Time (sec.)"
+                    # echo "ID|Function|Line Coverage|Time (sec.)|# of SMT files|# of SAT|Time of SAT|# of UNSAT|Time of UNSAT|# of OTHERWISE|Time of OTHERWISE" > output.csv2 && dump=True pytest integration_test_pyexz3.py --workers 4 && cp /dev/null paper_statistics/pyexz3_run_pyexz3.csv && cat *.csv >> output.csv2 && rm -f *.csv && mv output.csv2 paper_statistics/pyexz3_run_pyexz3.csv
+                    cdivb = c / b if b else 0
+                    edivd = e / d if d else 0
+                    gdivF = g / F if F else 0
+                    # f.write(f'{_id}|{root.replace("/", ".") + "." + modpath}|{col_1}|{round(finish-start, 2)}\n')
+                    f.write(f'{_id}|{root.replace("/", ".") + "." + modpath}|{col_1}|{round(finish-start, 2)}|{b+d+F}|{b}|{round(cdivb, 2)}|{d}|{round(edivd, 2)}|{F}|{round(gdivF, 2)}\n')
 
     def _omit(self, _id):
         return False #_id in ('19', '21', '23', '36', '41', '43')

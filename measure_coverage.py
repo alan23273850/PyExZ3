@@ -16,7 +16,7 @@ coverage_data = coverage.CoverageData()
 coverage_accumulated_missing_lines = {}
 cov = coverage.Coverage(data_file=None, source=[rootdir], omit=['**/__pycache__/**', '**/.venv/**'])
 with open(f'./project_statistics/{project_name}/incomplete_functions.txt', 'w') as fmf:
-    start2 = time.time()
+    start2 = time.time(); _id = '0'
     for dirpath, _, files in os.walk(f"./project_statistics/{project_name}"):
         for file in files:
             status = 0; our_filename = rootdir + '/' + dirpath.split('/')[-2].replace('.', '/') + '.py'
@@ -25,6 +25,11 @@ with open(f'./project_statistics/{project_name}/incomplete_functions.txt', 'w') 
             if status > 0:
                 with open(os.path.abspath(dirpath + '/inputs.pkl'), 'rb') as f:
                     func_inputs[(dirpath.split('/')[-2], dirpath.split('/')[-1])] = pickle.load(f)
+                with open(os.path.abspath(dirpath + '/smt.csv'), 'r') as f:
+                    lines = list(map(lambda x: x.strip(), f.readlines()))
+                    b = int(lines[1].split(',')[1]); c = float(lines[1].split(',')[2]); cdivb = c / b if b else 0
+                    d = int(lines[2].split(',')[1]); e = float(lines[2].split(',')[2]); edivd = e / d if d else 0
+                    F = int(lines[3].split(',')[1]); g = float(lines[3].split(',')[2]); gdivF = g / F if F else 0
             if status == 1: # Mode 1
                 with open(os.path.abspath(dirpath + '/' + file), 'r') as f:
                     mylist, b = map(lambda x: eval(x.strip()), f.readlines())
@@ -65,10 +70,17 @@ with open(f'./project_statistics/{project_name}/incomplete_functions.txt', 'w') 
                     except: pass
                     r.close(); s.close(); r0.close(); s0.close()
                     if process.is_alive(): process.kill()
-                    if time.time() - start > TOTAL_TIMEOUT: break
+                    finish = time.time()
+                    if finish - start > TOTAL_TIMEOUT: break
                     if len(coverage_accumulated_missing_lines[our_filename] & this_function_range) == 0: break
                 # if time.time() - start2 > 3 * 60 * 60: break
                 mylist = sorted(coverage_accumulated_missing_lines[our_filename] & this_function_range)
+                # echo "ID|Function|Line Coverage|Time (sec.)|# of SMT files|# of SAT|Time of SAT|# of UNSAT|Time of UNSAT|# of OTHERWISE|Time of OTHERWISE" > output.csv2 && dump=True python3 measure_coverage.py 2 ../04_Python && cp /dev/null paper_statistics/pyexz3_run_04Python.csv && cat *.csv >> output.csv2 && rm -f *.csv && mv output.csv2 paper_statistics/pyexz3_run_04Python.csv
+                _id = str(int(_id) + 1).zfill(3)
+                col_1 = "{}/{} ({:.2%})".format(len(this_function_range - coverage_accumulated_missing_lines[our_filename]), len(this_function_range), (len(this_function_range - coverage_accumulated_missing_lines[our_filename])/len(this_function_range)) if len(this_function_range) > 0 else 0)
+                if os.environ.get('dump', False):
+                    with open(f'{_id}.csv', 'w') as f:
+                        f.write(f'{_id}|{dirpath.split('/')[-2] + '.' + dirpath.split('/')[-1]}|{col_1}|{round(finish-start, 2)}|{b+d+F}|{b}|{round(cdivb, 2)}|{d}|{round(edivd, 2)}|{F}|{round(gdivF, 2)}\n')
             if status > 0:
                 try: n = min(mylist)
                 except: n = 0
