@@ -110,7 +110,7 @@ class TestCodeSnippets(unittest.TestCase):
                 #     col_1 += ' >> (100.00%)' #; col_2 += ' (dead code)'
                 with open(f'{_id}.csv', 'w') as f:
                     # echo "ID|Function|Line Coverage|Time (sec.)"
-                    # echo "ID|Function|Line Coverage|Time (sec.)|# of SMT files|# of SAT|Time of SAT|# of UNSAT|Time of UNSAT|# of OTHERWISE|Time of OTHERWISE" > output.csv2 && dump=True pytest integration_test_pyexz3.py --workers 4 && cp /dev/null paper_statistics/pyexz3_run_pyexz3.csv && cat *.csv >> output.csv2 && rm -f *.csv && mv output.csv2 paper_statistics/pyexz3_run_pyexz3.csv
+                    # mkdir paper_statistics && echo "ID|Function|Line Coverage|Time (sec.)|# of SMT files|# of SAT|Time of SAT|# of UNSAT|Time of UNSAT|# of OTHERWISE|Time of OTHERWISE" > output.csv2 && dump=True pytest integration_test_pyexz3.py --workers 4 && cp /dev/null paper_statistics/pyexz3_run_pyexz3.csv && cat *.csv >> output.csv2 && rm -f *.csv && mv output.csv2 paper_statistics/pyexz3_run_pyexz3.csv
                     cdivb = c / b if b else 0
                     edivd = e / d if d else 0
                     gdivF = g / F if F else 0
