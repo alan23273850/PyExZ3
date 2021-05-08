@@ -15,7 +15,7 @@ class TestCodeSnippets(unittest.TestCase):
     def test_08(self): self._execute("test", "complex", {'x':0, 'y':0}) # OK
     def test_09(self): self._execute("test", "cseppento1", {'x':0, 'y':0}, {14, 19}) # OK with deadcode [14, 19]
     def test_10(self): self._execute("test", "cseppento2", {'a':0, 'b':0}, {5}) # OK with deadcode [5]
-    # def test_11(self): self._execute("test", "cseppento3", {'x':0}, {14}) # TODO: (> 15 minutes)
+    def test_11(self): self._execute("test", "cseppento3", {'x':0}, {14}) # TODO: (> 15 minutes)
     def test_12(self): self._execute("test", "decorator_dict", {'d':{}}, {6, 8}) # TODO: dict type is not supported yet
     def test_13(self): self._execute("test", "decorator", {'a':0, 'b':0, 'c':0}) # OK
     def test_14(self): self._execute("test", "diamond", {'x':0, 'y':0, 'z':0}) # OK
@@ -75,7 +75,7 @@ class TestCodeSnippets(unittest.TestCase):
     def test_68(self): self._execute("fail", "arrayindex", {'i':0}, {13}) # TODO: still not able to pick another list element
     def test_69(self): self._execute("fail", "dictbool", {'d':{}}, {8}) # TODO: dict type is not supported yet
     def test_70(self): self._execute("fail", "divzero", {'in1':0, 'in2':0}, {7,8,9,10}) # TODO: truediv not mature enough
-    # def test_71(self): self._execute("fail", "git", {'a':0, 'b':0}, {29,30}) # TODO: (> 15 minutes)
+    def test_71(self): self._execute("fail", "git", {'a':0, 'b':0}, {29,30}) # TODO: (> 15 minutes)
     def test_72(self): self._execute("fail", "pow", {'x':0}, {7}) # TODO: CVC4 cannot solve 4 == x**2
     def test_73(self): self._execute("fail", "sqrttest", {'in1':0}, {8,9,10}) # TODO: sqrt is still handled concretely
 
