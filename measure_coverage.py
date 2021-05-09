@@ -45,7 +45,8 @@ with open(f'./project_statistics/{project_name}/incomplete_functions.txt', 'w') 
                         cov.start()
                         module = get_module_from_rootdir_and_modpath(rootdir, dirpath.split('/')[-2])
                         execute = get_function_from_module_and_funcname(module, dirpath.split('/')[-1], False)
-                        s2.send(inspect.getsourcelines(execute)) # the result should remain the same for all inputs
+                        this_function_source_lines = inspect.getsourcelines(execute)
+                        s2.send(set(cov.analysis(module.__file__)[1]) & set(range(this_function_source_lines[1], this_function_source_lines[1] + len(this_function_source_lines[0])))) # the result should remain the same for all inputs
                         pri_args, pri_kwargs = complete_primitive_arguments(execute, i)
                         try:
                             print('>>>', module, execute, pri_args, pri_kwargs)
@@ -61,7 +62,7 @@ with open(f'./project_statistics/{project_name}/incomplete_functions.txt', 'w') 
                         s0.send(0) # just a notification to the parent process that we're going to send data
                         s.send((coverage_data, coverage_accumulated_missing_lines))
                     process = multiprocessing.Process(target=child_process); process.start()
-                    this_function_source_lines = r2.recv(); this_function_range = set(range(this_function_source_lines[1], this_function_source_lines[1] + len(this_function_source_lines[0])))
+                    this_function_range = r2.recv()
                     if our_filename not in all_function_ranges_wrt_file:
                         all_function_ranges_wrt_file[our_filename] = this_function_range
                     else:
@@ -75,12 +76,12 @@ with open(f'./project_statistics/{project_name}/incomplete_functions.txt', 'w') 
                     if len(coverage_accumulated_missing_lines[our_filename] & this_function_range) == 0: break
                 # if time.time() - start2 > 3 * 60 * 60: break
                 mylist = sorted(coverage_accumulated_missing_lines[our_filename] & this_function_range)
-                # echo "ID|Function|Line Coverage|Time (sec.)|# of SMT files|# of SAT|Time of SAT|# of UNSAT|Time of UNSAT|# of OTHERWISE|Time of OTHERWISE" > output.csv2 && dump=True python3 measure_coverage.py 2 ../04_Python && cp /dev/null paper_statistics/pyexz3_run_04Python.csv && cat *.csv >> output.csv2 && rm -f *.csv && mv output.csv2 paper_statistics/pyexz3_run_04Python.csv
+                # mkdir -p paper_statistics && echo "ID|Function|Line Coverage|Time (sec.)|# of SMT files|# of SAT|Time of SAT|# of UNSAT|Time of UNSAT|# of OTHERWISE|Time of OTHERWISE" > output.csv2 && dump=True python3 measure_coverage.py 2 ../04_Python && cp /dev/null paper_statistics/pyexz3_run_04Python.csv && cat *.csv >> output.csv2 && rm -f *.csv && mv output.csv2 paper_statistics/pyexz3_run_04Python.csv
                 _id = str(int(_id) + 1).zfill(3)
                 col_1 = "{}/{} ({:.2%})".format(len(this_function_range - coverage_accumulated_missing_lines[our_filename]), len(this_function_range), (len(this_function_range - coverage_accumulated_missing_lines[our_filename])/len(this_function_range)) if len(this_function_range) > 0 else 0)
                 if os.environ.get('dump', False):
                     with open(f'{_id}.csv', 'w') as f:
-                        f.write(f'{_id}|{dirpath.split('/')[-2] + '.' + dirpath.split('/')[-1]}|{col_1}|{round(finish-start, 2)}|{b+d+F}|{b}|{round(cdivb, 2)}|{d}|{round(edivd, 2)}|{F}|{round(gdivF, 2)}\n')
+                        f.write(f"{_id}|{dirpath.split('/')[-2] + '.' + dirpath.split('/')[-1]}|{col_1}|{round(finish-start, 2)}|{b+d+F}|{b}|{round(cdivb, 2)}|{d}|{round(edivd, 2)}|{F}|{round(gdivF, 2)}\n")
             if status > 0:
                 try: n = min(mylist)
                 except: n = 0
