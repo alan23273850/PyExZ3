@@ -56,8 +56,8 @@ try:
                 if not modpath.startswith('.venv') and '__pycache__' not in modpath:
                     # if 'solutions.system_design.mint.mint_mapreduce' not in modpath: continue #cont = True
                     # if not cont: continue
-                    if args.mode == '1': cmd = f"./py-conbyte.py -r '{rootdir}' '{modpath}' --total_timeout {TOTAL_TIMEOUT} {{}} -m {args.iteration} --lib '{lib}' --include_exception --dump_projstats"
-                    elif args.mode == '2': cmd = f"./pyexz3.py -r '{rootdir}' '{modpath}' --total_timeout {TOTAL_TIMEOUT} {{}} -m {args.iteration} --lib '{lib}' --dump_projstats"
+                    if args.mode == '1': cmd = f"./py-conbyte.py -r '{rootdir}' '{modpath}' --total_timeout {TOTAL_TIMEOUT} {{}} --lib '{lib}' --include_exception --dump_projstats"
+                    elif args.mode == '2': cmd = f"./pyexz3.py -r '{rootdir}' '{modpath}' --total_timeout {TOTAL_TIMEOUT} {{}} --lib '{lib}' --dump_projstats"
                     else: cmd = f"./py-conbyte.py -r '{rootdir}' '{modpath}' --total_timeout {TOTAL_TIMEOUT} {{}} -m 1 --lib '{lib}' --include_exception --dump_projstats"
                     if os.fork() == 0: # child process
                         funcs = extract_function_list_from_modpath(rootdir, modpath)
