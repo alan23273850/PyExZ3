@@ -64,7 +64,7 @@ try:
                         for f in funcs:
                             cmd2 = cmd + f" -s {f}"
                             print(modpath, '+', f, '>>>'); print(cmd2)
-                            try: completed_process = subprocess.run(cmd2, shell=True, stdout=sys.stdout, stderr=sys.stderr)
+                            try: completed_process = subprocess.run(cmd2, shell=True, timeout=TOTAL_TIMEOUT+5, stdout=sys.stdout, stderr=sys.stderr)
                             except subprocess.CalledProcessError as e: print(e.output)
                         os._exit(os.EX_OK)
                     os.wait()
