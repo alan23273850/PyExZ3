@@ -48,7 +48,7 @@ class ExplorationEngine:
 		constraint.inputs = self._getInputs()
 
 	def _explore_loop(self, max_iterations):
-		self.tried_input_args = []; self.missing_lines = self.function_lines_range.copy() # Note that .copy() is very important!!!
+		self.missing_lines = self.function_lines_range.copy() # Note that .copy() is very important!!!
 		self._oneExecution(); iterations = 1
 		if max_iterations != 0 and iterations >= max_iterations:
 			log.debug("Maximum number of iterations reached, terminating")
@@ -69,7 +69,6 @@ class ExplorationEngine:
 				for name in model.keys():
 					self._updateSymbolicParameter(name,model[name])
 
-			if self.symbolic_inputs in self.tried_input_args: continue # don't run repeated inputs
 			self._oneExecution(selected)
 
 			iterations += 1
@@ -149,7 +148,7 @@ class ExplorationEngine:
 		self._recordInputs()
 		self.path.reset(expected_path)
 		ret = self.invocation.callFunction(self.symbolic_inputs)
-		print(ret); self.tried_input_args.append(self.symbolic_inputs.copy())
+		# print(ret)
 		self.missing_lines &= set(self.coverage.analysis(self.target_file)[2])
 		self.execution_return_values.append(ret)
 
