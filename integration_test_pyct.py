@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-import os, subprocess, unittest, sys, time
+import argparse, os, signal, subprocess, sys, threading, time, unittest
 import symbolic.explore
 import symbolic.loader
+from concurrencytest import ConcurrentTestSuite, fork_for_tests
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-n", dest='num', type=int, help="the number of processes", default=1)
+args = parser.parse_args()
 
 class TestCodeSnippets(unittest.TestCase):
-    dump = bool(os.environ.get('dump', False))
+    dump = False #bool(os.environ.get('dump', False))
     def test_01(self): self._execute("test", "build_in", {'a':0, 'b':0}) # OK
     def test_02(self): self._execute("test", "call_obj", {'a':0, 'b':0}, {11, 15, 26}) # TODO: 26/29
     def test_03(self): self._execute("test", "do_abs", {'a':0, 'b':0}, {6}) # TODO: 3/4
@@ -55,7 +60,7 @@ class TestCodeSnippets(unittest.TestCase):
 
     def _executesrv(self, root, modpath, inputs, _missing_lines=set()):
         libpath = root + '/.venv/lib/python3.8/site-packages'; os.system('kill -KILL $(lsof -t -i:8080)')
-        pid = subprocess.Popen(["python3", "../py-conbyte-official/test/realworld/rpyc/server.py"], env={**os.environ, 'PYTHONPATH': '../py-conbyte-official/' + libpath + ':' + os.environ['PYTHONPATH']}).pid
+        pid = subprocess.Popen(["python3", "../PyCT/test/realworld/rpyc/server.py"], env={**os.environ, 'PYTHONPATH': '../PyCT/' + libpath + ':' + os.environ['PYTHONPATH']}).pid
         time.sleep(1) # this short wait is very important!!! (for the client to connect)
         self._execute(root, modpath, inputs, _missing_lines, lib=libpath)
         os.system(f'kill -KILL {pid}')
@@ -64,10 +69,10 @@ class TestCodeSnippets(unittest.TestCase):
         _id = sys._getframe(1).f_code.co_name.split('_')[1]
         if _id == 'executesrv': _id = sys._getframe(2).f_code.co_name.split('_')[1]
         if not self._omit(_id):
-            self.iteration_max = 1; root = '../py-conbyte-official/' + root
+            self.iteration_max = 1; root = '../PyCT/' + root
             if os.path.abspath(root) not in sys.path: sys.path.insert(0, os.path.abspath(root))
             if lib:
-                lib = '../py-conbyte-official/' + lib
+                lib = '../PyCT/' + lib
                 if os.path.abspath(lib) not in sys.path: sys.path.insert(0, os.path.abspath(lib))
             modpath = modpath.replace('/', '.')
             engine = symbolic.explore.ExplorationEngine(symbolic.loader.Loader(modpath, None, root, None), str(inputs))
@@ -86,21 +91,21 @@ class TestCodeSnippets(unittest.TestCase):
             sys.path.remove(os.path.abspath(root))
         if self.dump: # Logging output section
             if self._omit(_id):
-                with open(f'{_id}.csv', 'w') as f:
+                with open(f'paper_statistics/pyexz3_run_pyct/{_id}.csv', 'w') as f:
                     f.write(f'{_id}|-|-|-\n')
             else:
                 col_1 = "{}/{} ({:.2%})".format(executed_lines, total_lines, (executed_lines/total_lines) if total_lines > 0 else 0)
                 # col_2 = str(sorted(list(missing_lines.values())[0]) if missing_lines else '')
                 # if col_2 == str(sorted(_missing_lines)):
                 #     col_1 += ' >> (100.00%)' #; col_2 += ' (dead code)'
-                with open(f'{_id}.csv', 'w') as f:
+                with open(f'paper_statistics/pyexz3_run_pyct/{_id}.csv', 'w') as f:
                     # echo "ID|Function|Line Coverage|Time (sec.)"
                     # mkdir -p paper_statistics && echo "ID|Function|Line Coverage|Time (sec.)|# of SMT files|# of SAT|Time of SAT|# of UNSAT|Time of UNSAT|# of OTHERWISE|Time of OTHERWISE" > output.csv2 && dump=True pytest integration_test_pyconbyte.py --workers 4 && cp /dev/null paper_statistics/pyexz3_run_pyconbyte.csv && cat *.csv >> output.csv2 && rm -f *.csv && mv output.csv2 paper_statistics/pyexz3_run_pyconbyte.csv
                     cdivb = c / b if b else 0
                     edivd = e / d if d else 0
                     gdivF = g / F if F else 0
-                    # f.write(f'{_id}|{root[len("../py-conbyte-official/"):].replace("/", ".") + "." + modpath}|{col_1}|{round(finish-start, 2)}\n')
-                    f.write(f'{_id}|{root[len("../py-conbyte-official/"):].replace("/", ".") + "." + modpath}|{col_1}|{round(finish-start, 2)}|{b+d+F}|{b}|{round(cdivb, 2)}|{d}|{round(edivd, 2)}|{F}|{round(gdivF, 2)}\n')
+                    # f.write(f'{_id}|{root[len("../PyCT/"):].replace("/", ".") + "." + modpath}|{col_1}|{round(finish-start, 2)}\n')
+                    f.write(f'{_id}|{root[len("../PyCT/"):].replace("/", ".") + "." + modpath}|{col_1}|{round(finish-start, 2)}|{b+d+F}|{b}|{round(cdivb, 2)}|{d}|{round(edivd, 2)}|{F}|{round(gdivF, 2)}\n')
 
     def _omit(self, _id):
         return False #_id in ('19', '21', '23', '36', '41', '43')
@@ -118,3 +123,31 @@ class TestCodeSnippets(unittest.TestCase):
         print(b)
         if iteration == self.iteration_max: return True #self.assertEqual(a, b)
         return a == b
+
+if __name__ == '__main__':
+    TestCodeSnippets.dump = True
+    os.system('rm -r paper_statistics/pyexz3_run_pyct*')
+    os.system('mkdir -p paper_statistics/pyexz3_run_pyct')
+
+    # load the TestSuite
+    loader = unittest.TestLoader()
+    suite = unittest.TestSuite()
+    suite.addTests(loader.loadTestsFromTestCase(TestCodeSnippets))
+
+    # start preparation
+    def job():
+        while len(next(os.walk('paper_statistics/pyexz3_run_pyct'))[2]) != suite.countTestCases(): pass
+        os.system('echo "ID|Function|Line Coverage|Time (sec.)|# of SMT files|# of SAT|Time of SAT|# of UNSAT|Time of UNSAT|# of OTHERWISE|Time of OTHERWISE" > paper_statistics/pyexz3_run_pyct.csv')
+        os.system('cat paper_statistics/pyexz3_run_pyct/*.csv >> paper_statistics/pyexz3_run_pyct.csv')
+        os.system('rm -r paper_statistics/pyexz3_run_pyct')
+        pid = os.getpid()
+        os.kill(pid, signal.SIGTERM) #or signal.SIGKILL
+    t = threading.Thread(target = job)
+    t.start()
+
+    # run the TestSuite
+    concurrent_suite = ConcurrentTestSuite(suite, fork_for_tests(args.num))
+    result = unittest.TextTestRunner().run(concurrent_suite)
+    result.stop()
+
+    print('Finish the integration test!!!')

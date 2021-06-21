@@ -2,11 +2,18 @@
 from to_be_imported import *
 
 SINGLE_TIMEOUT = 15; testing_mode = False # default mode, this is better since a function may cover places of another function where that function cannot cover by itself.
-exe = './pyexz3.py' if args.mode == '2' else './py-conbyte.py'
+toolname = 'pyexz3' if args.mode == '2' else 'pyct'
+exe = f'./{toolname}.py'
 
 def f1(r0, r):
     if r0.poll(SINGLE_TIMEOUT + 5): # may get stuck here for some unknown reason
         return r.recv()
+
+# Logging output section
+if os.path.isfile(f'paper_statistics/{toolname}_run_{project_name}.csv') and os.path.isdir(f'paper_statistics/{toolname}_run_{project_name}'):
+    os.system(f'rm -r paper_statistics/{toolname}_run_{project_name}*')
+if not os.path.isdir(f'paper_statistics/{toolname}_run_{project_name}'):
+    os.system(f'mkdir -p paper_statistics/{toolname}_run_{project_name}')
 
 total_lines = 0
 missing_lines = 0
@@ -76,11 +83,11 @@ with open(f'./project_statistics/{project_name}/incomplete_functions.txt', 'w') 
                     if len(coverage_accumulated_missing_lines[our_filename] & this_function_range) == 0: break
                 # if time.time() - start2 > 3 * 60 * 60: break
                 mylist = sorted(coverage_accumulated_missing_lines[our_filename] & this_function_range)
-                # mkdir -p paper_statistics && echo "ID|Function|Line Coverage|Time (sec.)|# of SMT files|# of SAT|Time of SAT|# of UNSAT|Time of UNSAT|# of OTHERWISE|Time of OTHERWISE" > output.csv2 && dump=True python3 measure_coverage.py 2 ../04_Python && cp /dev/null paper_statistics/pyexz3_run_04Python.csv && cat *.csv >> output.csv2 && rm -f *.csv && mv output.csv2 paper_statistics/pyexz3_run_04Python.csv
+                # mkdir -p paper_statistics && echo "ID|Function|Line Coverage|Time (sec.)|# of SMT files|# of SAT|Time of SAT|# of UNSAT|Time of UNSAT|# of OTHERWISE|Time of OTHERWISE" > output.csv2 && dump=True python3 measure_coverage.py 1 ../04_Python && cp /dev/null paper_statistics/pyct_run_04Python.csv && cat *.csv >> output.csv2 && rm -f *.csv && mv output.csv2 paper_statistics/pyct_run_04Python.csv
                 _id = str(int(_id) + 1).zfill(3)
                 col_1 = "{}/{} ({:.2%})".format(len(this_function_range - coverage_accumulated_missing_lines[our_filename]), len(this_function_range), (len(this_function_range - coverage_accumulated_missing_lines[our_filename])/len(this_function_range)) if len(this_function_range) > 0 else 0)
-                if os.environ.get('dump', False):
-                    with open(f'{_id}.csv', 'w') as f:
+                if True: #os.environ.get('dump', False):
+                    with open(f'paper_statistics/{toolname}_run_{project_name}/{_id}.csv', 'w') as f:
                         f.write(f"{_id}|{dirpath.split('/')[-2] + '.' + dirpath.split('/')[-1]}|{col_1}|{round(finish-start, 2)}|{b+d+F}|{b}|{round(cdivb, 2)}|{d}|{round(edivd, 2)}|{F}|{round(gdivF, 2)}\n")
             if status > 0:
                 try: n = min(mylist)
@@ -130,3 +137,8 @@ with open(os.path.abspath(f"./project_statistics/{project_name}/inputs_and_cover
         with open(os.path.abspath(f"./project_statistics/{project_name}/experiment_time.txt"), 'r') as f2:
             print(f2.readlines()[0], end='', file=f)
     except: pass
+
+# Logging output section
+os.system(f'echo "ID|Function|Line Coverage|Time (sec.)|# of SMT files|# of SAT|Time of SAT|# of UNSAT|Time of UNSAT|# of OTHERWISE|Time of OTHERWISE" > paper_statistics/{toolname}_run_{project_name}.csv')
+os.system(f'cat paper_statistics/{toolname}_run_{project_name}/*.csv >> paper_statistics/{toolname}_run_{project_name}.csv')
+os.system(f'rm -r paper_statistics/{toolname}_run_{project_name}')
